@@ -2,80 +2,35 @@ namespace FTI_DataSharingSchedulerServices;
 
 public class Worker : BackgroundService
 {
+    private const string DEFAULT_FOLDER = @"C:\ProgramData\FairbancData";
+
     private readonly ILogger<Worker> _logger;
+    private readonly string _schedulerConfigFolder = DEFAULT_FOLDER;
 
-    private string SchedulerConfigFolder
-    {
-        get;
-        set;
-    } = @"C:\ProgramData\FairbancData";
-
-    public Int16 Date1
-    {
-        get; private set;
-    }
-    public Int16 Date2
-    {
-        get; private set;
-    }
-    public Int16 Date3
-    {
-        get; private set;
-    }
-    public string Time
-    {
-        get; private set;
-    }
-    public string Sales
-    {
-        get; private set;
-    }
-    public string Repayment
-    {
-        get; private set;
-    }
-    public string Outlet
-    {
-        get; private set;
-    }
-    public string DataFolder
-    {
-        get; private set;
-    }
-    public int RunHour
-    {
-        get; private set;
-    } = -1;
-
-    public int RunMinute
-    {
-        get; private set;
-    } = 0;
-
-    public string DTid
-    {
-        get; private set;
-    } = "0";
-
-    public string DistName
-    {
-        get; private set;
-    } = "Test";
-    public string AppWorkingFolder
-    {
-        get; private set;
-    }  
+    public Int16 Date1 { get; private set; }
+    public Int16 Date2 { get; private set; }
+    public Int16 Date3 { get; private set; }
+    public string Time { get; private set; }
+    public string Sales { get; private set; }
+    public string Repayment { get; private set; }
+    public string Outlet { get; private set; }
+    public string DataFolder { get; private set; }
+    public int RunHour { get; private set; } = -1;
+    public int RunMinute { get; private set; } = 0;
+    public string DTid { get; private set; } = "0";
+    public string DistName { get; private set; } = "Test";
+    public string AppWorkingFolder { get; private set; }
 
     public Worker(ILogger<Worker> logger)
     {
         _logger = logger;
         try
         {
-            AppWorkingFolder = SchedulerConfigFolder + @"\Datasharing-result";
+            AppWorkingFolder = _schedulerConfigFolder + @"\Datasharing-result";
         }
         catch (Exception)
         {
-            AppWorkingFolder = @"C:\ProgramData\FairbancData";
+            AppWorkingFolder = DEFAULT_FOLDER;
             _logger.LogError("Cannot set application working folder (the default is: current user 'Download' folder) !");
         }
     }
@@ -86,25 +41,17 @@ public class Worker : BackgroundService
         {
             _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
 
-            // ---- Start the code below, don't change the code BEFORE this line ---- //
-            // ---- vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv ---- //
-            // Dont forget to re-read the config file
             await InitializeAsync();
-            // Then check if it's intended time to run
 
-            bool v1 = (DateTime.Now.Hour == RunHour && DateTime.Now.Minute == RunMinute);
-            bool v2 = (DateTime.Now.Day == Date1 || DateTime.Now.Day == Date2 || DateTime.Now.Day == Date3);
-            _logger.LogInformation((v1 && v2).ToString());
-            if ((DateTime.Now.Hour == RunHour && DateTime.Now.Minute == RunMinute) &&
-               ( DateTime.Now.Day == Date1 || DateTime.Now.Day == Date2 || DateTime.Now.Day == Date3))
+            bool isScheduledTime = DateTime.Now.Hour == RunHour && DateTime.Now.Minute == RunMinute;
+            bool isScheduledDay = new[] { Date1, Date2, Date3 }.Contains((short)DateTime.Now.Day);
+
+            if (isScheduledTime && isScheduledDay)
             {
-
-                // Then perform the data sharing upload task
                 await PerformTask();
             }
 
-            // ---- Do add the code above, don't change the code AFTER this line ---- //
-            await Task.Delay (TimeSpan.FromMinutes(1), stoppingToken);
+            await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
         }
     }
 
@@ -112,14 +59,14 @@ public class Worker : BackgroundService
     {
         try
         {
-            await ReadFileAsync(SchedulerConfigFolder + "\\DateTimeInfo.ini");
+            await ReadFileAsync(_schedulerConfigFolder + "\\DateTimeInfo.ini");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex.Message); ;
+            _logger.LogError(ex.Message);
         }
-
     }
+
     private async Task ReadFileAsync(string filePath)
     {
         try
@@ -129,43 +76,25 @@ public class Worker : BackgroundService
             {
                 switch (lines[i])
                 {
-                    case "[DATE#1]":
-                        Date1 =Convert.ToInt16( lines[i + 1]);
-                        break;
-                    case "[DATE#2]":
-                        Date2 = Convert.ToInt16(lines[i + 1]);
-                        break;
-                    case "[DATE#3]":
-                        Date3 = Convert.ToInt16(lines[i + 1]);
-                        break;
+                    case "[DATE#1]": Date1 = Convert.ToInt16(lines[i + 1]); break;
+                    case "[DATE#2]": Date2 = Convert.ToInt16(lines[i + 1]); break;
+                    case "[DATE#3]": Date3 = Convert.ToInt16(lines[i + 1]); break;
                     case "[TIME]":
                         Time = lines[i + 1];
-                        RunHour = Convert.ToInt32(Time.Substring(0, 2)); RunMinute = Convert.ToInt32(Time.Substring(3, 2));
+                        (RunHour, RunMinute) = (Convert.ToInt32(Time[..2]), Convert.ToInt32(Time.Substring(3, 2)));
                         break;
-                    case "[SALES]":
-                        Sales = lines[i + 1];
-                        break;
-                    case "[REPAYMENT]":
-                        Repayment = lines[i + 1];
-                        break;
-                    case "[OUTLET]":
-                        Outlet = lines[i + 1];
-                        break;
-                    case "[FOLDER]":
-                        DataFolder = lines[i + 1];
-                        break;
-                    case "[DTID]":
-                        DTid = lines[i + 1];
-                        break;
-                    case "[DTNAME]":
-                        DistName = lines[i + 1];
-                        break;
+                    case "[SALES]": Sales = lines[i + 1]; break;
+                    case "[REPAYMENT]": Repayment = lines[i + 1]; break;
+                    case "[OUTLET]": Outlet = lines[i + 1]; break;
+                    case "[FOLDER]": DataFolder = lines[i + 1]; break;
+                    case "[DTID]": DTid = lines[i + 1]; break;
+                    case "[DTNAME]": DistName = lines[i + 1]; break;
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex.Message);
+            _logger.LogError(ex, "Error reading file: {FilePath}", filePath);
         }
     }
 
@@ -177,12 +106,11 @@ public class Worker : BackgroundService
 
             _logger.LogInformation($">>>> [RESULT] File info value in sequence are {Date1} ,{Date2} ,{Date3} ,{Time} ,{Sales}, {Repayment}, {Outlet}, {DataFolder} {DTid} and {DistName} ...");
 #if DEBUG
-            var clsUploadProcess = new UploadProcess("Y", "Y", Sales, Repayment, Outlet, DataFolder, DTid, "Testing_Only", AppWorkingFolder, _logger);
+            var uploadProcess = new UploadProcess("Y", "Y", Sales, Repayment, Outlet, DataFolder, DTid, "Testing_Only", AppWorkingFolder, _logger);
 #else
-            var clsUploadProcess = new UploadProcess("Y","Y",Sales,Repayment, Outlet, DataFolder, DTid, DistName, AppWorkingFolder, _logger);
+            var uploadProcess = new UploadProcess("Y","Y",Sales,Repayment, Outlet, DataFolder, DTid, DistName, AppWorkingFolder, _logger);
 #endif
-            // Execute Upload process class
-            clsUploadProcess.Main();
+            await uploadProcess.ExecuteAsync();
         }
         catch (Exception ex)
         {

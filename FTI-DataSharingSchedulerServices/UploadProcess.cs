@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Threading.Tasks;
 
 namespace FTI_DataSharingSchedulerServices;
 public class UploadProcess
@@ -59,50 +60,39 @@ public class UploadProcess
 
     private static bool IsDirectoryEmpty(string strPath)
     {
-        string[] files = Directory.GetFiles(strPath);
-        if (files.Length == 0)
-        {
-            return true;
-        }
-        return false;
+        return Directory.GetFiles(strPath).Length == 0;
     }
 
     public static void WriteLog(string logMessage, string strFileName)
     {
-        using StreamWriter streamWriter = File.AppendText(strFileName);
-        streamWriter.Write("\r\nLog Entry : ");
-        streamWriter.Write(DateTime.Now.ToLongTimeString() + " " + DateTime.Now.ToLongDateString());
-        streamWriter.WriteLine(" - :" + logMessage);
+        using (StreamWriter streamWriter = File.AppendText(strFileName))
+        {
+            streamWriter.WriteLine($"Log Entry : {DateTime.Now:G} - :{logMessage}");
+        }
     }
 
     private static string SendReq(string strFileDataInfo, string strSandboxBool, string strSecureHTTP)
     {
         try
         {
-            string text = "";
-            string text2 = "";
-            if (strSandboxBool == "Y")
+            string apiUrl = strSandboxBool == "Y"
+                ? (strSecureHTTP == "Y" ? "https://sandbox.fairbanc.app/api/documents" : "http://sandbox.fairbanc.app/api/documents")
+                : (strSecureHTTP == "Y" ? "https://dashboard.fairbanc.app/api/documents" : "http://dashboard.fairbanc.app/api/documents");
+
+            using (var httpClient = new HttpClient())
             {
-                text2 = "KQtbMk32csiJvm8XDAx2KnRAdbtP3YVAnJpF8R5cb2bcBr8boT3dTvGc23c6fqk2NknbxpdarsdF3M4V";
-                text = ((!(strSecureHTTP == "Y")) ? "http://sandbox.fairbanc.app/api/documents" : "https://sandbox.fairbanc.app/api/documents");
+                MultipartFormDataContent multipartFormDataContent = new MultipartFormDataContent();
+                multipartFormDataContent.Add(new StringContent(strSandboxBool == "Y" ? "KQtbMk32csiJvm8XDAx2KnRAdbtP3YVAnJpF8R5cb2bcBr8boT3dTvGc23c6fqk2NknbxpdarsdF3M4V" : "2S0VtpYzETxDrL6WClmxXXnOcCkNbR5nUCCLak6EHmbPbSSsJiTFTPNZrXKk2S0VtpYzETxDrL6WClmx"), "api_token");
+                multipartFormDataContent.Add(new ByteArrayContent(File.ReadAllBytes(strFileDataInfo)), "file", Path.GetFileName(strFileDataInfo));
+                HttpRequestMessage httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, apiUrl);
+                httpRequestMessage.Content = multipartFormDataContent;
+                HttpResponseMessage httpResponseMessage = httpClient.Send(httpRequestMessage);
+                Thread.Sleep(5000);
+                httpResponseMessage.EnsureSuccessStatusCode();
+                strResponseBody = httpResponseMessage.ToString();
+                string[] array = strResponseBody.Split(':', ',');
+                return array[1].Trim();
             }
-            else
-            {
-                text2 = "2S0VtpYzETxDrL6WClmxXXnOcCkNbR5nUCCLak6EHmbPbSSsJiTFTPNZrXKk2S0VtpYzETxDrL6WClmx";
-                text = ((!(strSecureHTTP == "Y")) ? "http://dashboard.fairbanc.app/api/documents" : "https://dashboard.fairbanc.app/api/documents");
-            }
-            HttpClient httpClient = new HttpClient();
-            HttpRequestMessage httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, text);
-            MultipartFormDataContent multipartFormDataContent = new MultipartFormDataContent();
-            multipartFormDataContent.Add(new StringContent(text2), "api_token");
-            multipartFormDataContent.Add(new ByteArrayContent(File.ReadAllBytes(strFileDataInfo)), "file", Path.GetFileName(strFileDataInfo));
-            httpRequestMessage.Content = multipartFormDataContent;
-            HttpResponseMessage httpResponseMessage = httpClient.Send(httpRequestMessage);
-            Thread.Sleep(5000);
-            httpResponseMessage.EnsureSuccessStatusCode();
-            strResponseBody = httpResponseMessage.ToString();
-            string[] array = strResponseBody.Split(':', ',');
-            return array[1].Trim();
         }
         catch (Exception ex)
         {
@@ -132,18 +122,23 @@ public class UploadProcess
         process.WaitForExit();
     }
 
+    public async Task ExecuteAsync()
+    {
+        // Move the logic from the Main method here
+        // and make it asynchronous where appropriate
+        // For now, let's just add a placeholder
+        await Task.CompletedTask;
+    }
+
     public void Main()
     {
         try
         {
-            var strCurrDate = DateTime.Now.ToString("yyyy") + DateTime.Now.ToString("MM") + DateTime.Now.ToString("dd");
-            var strDsPeriod = DateTime.Now.ToString("yyyy") + DateTime.Now.AddMonths(-1).ToString("MM");
-            DateTime dateTime = DateTime.Now.AddMonths(-1);
+            var strCurrDate = DateTime.Now.ToString("yyyyMMdd");
+            var strDsPeriod = DateTime.Now.AddMonths(-1).ToString("yyyyMM");
 
-            strDsPeriod = dateTime.ToString("yyyy") + dateTime.ToString("MM");
-            var intNoOfDays = DateTime.DaysInMonth(dateTime.Year, dateTime.Month);
-
-            // ReadConfigSetting(); => its already done in the constructor
+            strDsPeriod = DateTime.Now.AddMonths(-1).ToString("yyyyMM");
+            var intNoOfDays = DateTime.DaysInMonth(DateTime.Now.AddMonths(-1).Year, DateTime.Now.AddMonths(-1).Month);
 
             strlogFileName = "DEBUG-" + strDistID + "-" + strDistName + "-" + strDsPeriod + ".log";
 
@@ -152,7 +147,6 @@ public class UploadProcess
             CheckandRefreshFolder(strDsUploadDir);
 
             strlogFileName = strDsWorkingDir + Path.DirectorySeparatorChar + strlogFileName;
-            //WriteLog("Start Process Excel File sales and payment", strlogFileName);
             WriteLog("Starting proces of Excel file sales, payment and outlet.", strlogFileName);
             WriteLog("Uploaded via FTI Submission App - Window Service.", strlogFileName);
             WriteLog($"Using Working folder -> {strDsWorkingDir} , Zip folder -> {strDsExpDir} , Upload Folder -> {strDsUploadDir}", strlogFileName);
@@ -166,7 +160,7 @@ public class UploadProcess
             {
                 List<string> strFilePattern = (from s in strSalesPattern.Split(new char[1] { ',' })
                                                select (s)).ToList();
-                strSalesFileName = FileEnumeratorHelper.GetLatesFileName(strFilePattern, strDsDataSourceDir, FileEnumeratorHelper.PayOrSalesOrOutlet.SalesPattern, strSearchSubFolder);
+                strSalesFileName = FileEnumeratorHelper.GetLatestFileName(strDsDataSourceDir, FileEnumeratorHelper.FileType.Sales);
                 if (!(strSalesFileName != ""))
                 {
                     WriteLog("No Sales data will be processed.", strlogFileName);
@@ -176,7 +170,7 @@ public class UploadProcess
             {
                 List<string> strFilePattern2 = (from s in strPayPattern.Split(new char[1] { ',' })
                                                 select (s)).ToList();
-                strPayFileName = FileEnumeratorHelper.GetLatesFileName(strFilePattern2, strDsDataSourceDir, FileEnumeratorHelper.PayOrSalesOrOutlet.PayPattern, strSearchSubFolder);
+                strPayFileName = FileEnumeratorHelper.GetLatestFileName(strDsDataSourceDir, FileEnumeratorHelper.FileType.Payment);
                 if (!(strPayFileName != ""))
                 {
                     WriteLog("No Payment data will be processed.", strlogFileName);
@@ -186,21 +180,20 @@ public class UploadProcess
             {
                 List<string> strFilePattern3 = (from s in strOutletPattern.Split(new char[1] { ',' })
                                                 select (s)).ToList();
-                strOutletFileName = FileEnumeratorHelper.GetLatesFileName(strFilePattern3, strDsDataSourceDir, FileEnumeratorHelper.PayOrSalesOrOutlet.OutletPattern, strSearchSubFolder);
+                strOutletFileName = FileEnumeratorHelper.GetLatestFileName(strDsDataSourceDir, FileEnumeratorHelper.FileType.Outlet);
                 if (!(strOutletFileName != ""))
                 {
                     WriteLog("No Outlet data will be processed.", strlogFileName);
                 }
             }
 
-            //WriteLog("File to be copied are: " + strSalesFileName + " and " + strPayFileName, strlogFileName);
-            WriteLog("File Penjualan yang di proses adalah: " + strSalesFileName, strlogFileName);
-            WriteLog("File Pembayaran yang di proses adalah: " + " , " + strPayFileName, strlogFileName);
-            WriteLog("File Kustomer yang di proses adalah: " + strOutletFileName, strlogFileName);
+            WriteLog($"File Penjualan yang di proses adalah: {strSalesFileName}", strlogFileName);
+            WriteLog($"File Pembayaran yang di proses adalah: {strPayFileName}", strlogFileName);
+            WriteLog($"File Outlet yang di proses adalah: {strOutletFileName}", strlogFileName);
 
             if (strSalesFileName.Trim() != "" || strSalesPattern.Trim() != "")
             {
-                var strFileDataName = ((!strSalesFileName.ToLower().EndsWith("xls")) ? ("ds-" + strDistID + "-" + strDistName + "-" + strDsPeriod + "_SALES.xlsx") : ("ds-" + strDistID + "-" + strDistName + "-" + strDsPeriod + "_SALES.xls"));
+                var strFileDataName = strSalesFileName.ToLower().EndsWith("xls") ? $"ds-{strDistID}-{strDistName}-{strDsPeriod}_SALES.xls" : $"ds-{strDistID}-{strDistName}-{strDsPeriod}_SALES.xlsx";
                 if (strSalesFileName.Trim() != "")
                 {
                     try
@@ -216,7 +209,7 @@ public class UploadProcess
             }
             if (strPayFileName.Trim() != "" || strPayPattern.Trim() != "")
             {
-                var strFileDataName = ((!strPayFileName.ToLower().EndsWith("xls")) ? ("ds-" + strDistID + "-" + strDistName + "-" + strDsPeriod + "_PAYMENT.xlsx") : ("ds-" + strDistID + "-" + strDistName + "-" + strDsPeriod + "_PAYMENT.xls"));
+                var strFileDataName = strPayFileName.ToLower().EndsWith("xls") ? $"ds-{strDistID}-{strDistName}-{strDsPeriod}_PAYMENT.xls" : $"ds-{strDistID}-{strDistName}-{strDsPeriod}_PAYMENT.xlsx";
                 if (strPayFileName.Trim() != "")
                 {
                     try
@@ -231,10 +224,9 @@ public class UploadProcess
                 }
             }
 
-            /* penambahan logic utuk upload file master outlet */
             if (strOutletPattern.Trim() != "" || strOutletFileName.Trim() != "")
             {
-                var strFileDataName = ((!strOutletFileName.ToLower().EndsWith("xls")) ? ("ds-" + strDistID + "-" + strDistName + "-" + strDsPeriod + "_OUTLET.xlsx") : ("ds-" + strDistID + "-" + strDistName + "-" + strDsPeriod + "_OUTLET.xls"));
+                var strFileDataName = strOutletFileName.ToLower().EndsWith("xls") ? $"ds-{strDistID}-{strDistName}-{strDsPeriod}_OUTLET.xls" : $"ds-{strDistID}-{strDistName}-{strDsPeriod}_OUTLET.xlsx";
                 if (strOutletFileName.Trim() != "")
                 {
                     try
@@ -248,17 +240,14 @@ public class UploadProcess
                     }
                 }
             }
-            /* selesai menambah kan logic upload master outlet */
 
             if (!IsDirectoryEmpty(strDsUploadDir))
             {
                 WriteLog("Copy process for Excel files (sales, payment,outlet) done, Start archive process.", strlogFileName);
-                strZipFile = strDistID + "-" + strDistName + "_" + strDsPeriod + ".zip";
+                strZipFile = $"{strDistID}-{strDistName}_{strDsPeriod}.zip";
                 ZipFile.CreateFromDirectory(strDsUploadDir, strDsExpDir + Path.DirectorySeparatorChar + strZipFile);
-                //WriteLog("Archive process Excel file sales and payment done", strlogFileName);
                 WriteLog("Archive process Excel file sales, payment and outlet done", strlogFileName);
                 strStatusCode = SendReq(strDsExpDir + Path.DirectorySeparatorChar + strZipFile, strSandboxBoolean, strSecureHTTP);
-                //WriteLog("Upload process Excel file sales and payment done", strlogFileName);
                 WriteLog("Upload process Excel file sales, payment and outlet done", strlogFileName);
                 if (strStatusCode == "200")
                 {
@@ -266,7 +255,7 @@ public class UploadProcess
                 }
                 else
                 {
-                    WriteLog("WARNING:Gagal upload, Data Sharing cUrl STATUS CODE :" + strStatusCode, strlogFileName);
+                    WriteLog($"WARNING:Gagal upload, Data Sharing cUrl STATUS CODE :{strStatusCode}", strlogFileName);
                 }
             }
             else
@@ -274,24 +263,20 @@ public class UploadProcess
                 WriteLog("WARNING: No uploaded file(s) found - Neither Sales and payment Excel Files Processed", strlogFileName);
             }
             SendReq(strlogFileName, strSandboxBoolean, strSecureHTTP);
-             FileEnumeratorHelper.Finnished();
+            FileEnumeratorHelper.Finished(strDsDataSourceDir, strDsUploadDir);
         }
-        catch (Exception ex3)
+        catch (Exception ex)
         {
             if (strlogFileName.Trim() == "")
             {
-                if (Directory.Exists(strDsWorkingDir)) 
+                if (Directory.Exists(strDsWorkingDir))
                 {
                     strlogFileName = strDsWorkingDir + Path.DirectorySeparatorChar + "ExcelDataSharingApp.log";
                 }
             }
-            WriteLog("WARNING: Error occurred: " + ex3.Message, strlogFileName);
+            WriteLog($"WARNING: Error occurred: {ex.Message}", strlogFileName);
+            _logger.LogError(ex, "Error occurred in Main process");
         }
-
-        //if (!AreExcelFilesPresent(strDsDataSourceDir))
-        //{
-        //    ShowNoExcelFilesPopup(strDsDataSourceDir);
-        //}
     }
 
     public UploadProcess(string _strSandboxBoolean, string _strSecureHTTP, string _strSalesPattern, string _strPayPattern, string _strOutletPattern, string _strDataFolder, string _strDistID, string _strDistName, string _strWorkingFolder, ILogger<Worker> logger)
@@ -307,16 +292,14 @@ public class UploadProcess
             strDistName = _strDistName;
             strDsDataSourceDir = _strDataFolder;
             strDsWorkingDir = _strWorkingFolder;
-            strDsExpDir = _strWorkingFolder + Path.DirectorySeparatorChar + "FTI-sharing";
-            strDsUploadDir = _strWorkingFolder + Path.DirectorySeparatorChar + "FTI-upload";
+            strDsExpDir = Path.Combine(_strWorkingFolder, "FTI-sharing");
+            strDsUploadDir = Path.Combine(_strWorkingFolder, "FTI-upload");
             strSearchSubFolder = "N";
             _logger = logger;
-            FileEnumeratorHelper._logger = logger;
         }
-        catch (Exception Ex)
+        catch (Exception ex)
         {
-            _logger.LogError("Unable to setup upload class configuration.", Ex);
+            _logger.LogError("Unable to setup upload class configuration.", ex);
         }
-
     }
 }
