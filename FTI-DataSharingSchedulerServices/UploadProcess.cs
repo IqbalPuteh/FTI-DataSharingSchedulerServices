@@ -48,7 +48,7 @@ public class UploadProcess
         {
             if (Directory.Exists(location))
             {
-                Directory.Delete(location, true);
+                DeleteAllFilesAndSubdirectories(location);
             }
             Directory.CreateDirectory(location);
         }
@@ -101,39 +101,11 @@ public class UploadProcess
         }
     }
 
-    private static bool AreExcelFilesPresent(string folderPath)
-    {
-        string[] excelExtensions = { ".xls", ".xlsx", ".xlsm" };
-        return Directory.GetFiles(folderPath)
-            .Any(file => excelExtensions.Contains(Path.GetExtension(file).ToLower()));
-    }
-
-    private static void ShowNoExcelFilesPopup(string folderPath)
-    {
-        ProcessStartInfo startInfo = new ProcessStartInfo
-        {
-            FileName = "DS-PopUp.exe",
-            LoadUserProfile = true,
-            Arguments = folderPath
-        };
-        var process = new Process();
-        process.StartInfo = startInfo;
-        process.Start();
-        process.WaitForExit();
-    }
-
     public async Task ExecuteAsync()
-    {
-        // Move the logic from the Main method here
-        // and make it asynchronous where appropriate
-        // For now, let's just add a placeholder
-        await Task.CompletedTask;
-    }
-
-    public void Main()
     {
         try
         {
+            //await Task.CompletedTask;
             var strCurrDate = DateTime.Now.ToString("yyyyMMdd");
             var strDsPeriod = DateTime.Now.AddMonths(-1).ToString("yyyyMM");
 
@@ -142,8 +114,7 @@ public class UploadProcess
 
             strlogFileName = "DEBUG-" + strDistID + "-" + strDistName + "-" + strDsPeriod + ".log";
 
-            strDsExpDir += strDsPeriod;
-            CheckandRefreshFolder(strDsExpDir);
+            CheckandRefreshFolder(strDsExpDir + strDsPeriod);
             CheckandRefreshFolder(strDsUploadDir);
 
             strlogFileName = strDsWorkingDir + Path.DirectorySeparatorChar + strlogFileName;
@@ -160,7 +131,7 @@ public class UploadProcess
             {
                 List<string> strFilePattern = (from s in strSalesPattern.Split(new char[1] { ',' })
                                                select (s)).ToList();
-                strSalesFileName = FileEnumeratorHelper.GetLatestFileName(strDsDataSourceDir, FileEnumeratorHelper.FileType.Sales);
+                strSalesFileName = FileEnumeratorHelper.GetLatestFileName(strFilePattern, strDsDataSourceDir, FileEnumeratorHelper.Ft.Sales, strSearchSubFolder, _logger);
                 if (!(strSalesFileName != ""))
                 {
                     WriteLog("No Sales data will be processed.", strlogFileName);
@@ -170,7 +141,7 @@ public class UploadProcess
             {
                 List<string> strFilePattern2 = (from s in strPayPattern.Split(new char[1] { ',' })
                                                 select (s)).ToList();
-                strPayFileName = FileEnumeratorHelper.GetLatestFileName(strDsDataSourceDir, FileEnumeratorHelper.FileType.Payment);
+                strPayFileName = FileEnumeratorHelper.GetLatestFileName(strFilePattern2, strDsDataSourceDir, FileEnumeratorHelper.Ft.Payment, strSearchSubFolder ,_logger);
                 if (!(strPayFileName != ""))
                 {
                     WriteLog("No Payment data will be processed.", strlogFileName);
@@ -180,16 +151,16 @@ public class UploadProcess
             {
                 List<string> strFilePattern3 = (from s in strOutletPattern.Split(new char[1] { ',' })
                                                 select (s)).ToList();
-                strOutletFileName = FileEnumeratorHelper.GetLatestFileName(strDsDataSourceDir, FileEnumeratorHelper.FileType.Outlet);
+                strOutletFileName = FileEnumeratorHelper.GetLatestFileName(strFilePattern3, strDsDataSourceDir, FileEnumeratorHelper.Ft.Outlet, strSearchSubFolder, _logger);
                 if (!(strOutletFileName != ""))
                 {
                     WriteLog("No Outlet data will be processed.", strlogFileName);
                 }
             }
 
-            WriteLog($"File Penjualan yang di proses adalah: {strSalesFileName}", strlogFileName);
-            WriteLog($"File Pembayaran yang di proses adalah: {strPayFileName}", strlogFileName);
-            WriteLog($"File Outlet yang di proses adalah: {strOutletFileName}", strlogFileName);
+            if (strSalesFileName != "") WriteLog($"File Penjualan yang di proses adalah: {strSalesFileName.Trim()}", strlogFileName);
+            if (strPayFileName != "") WriteLog($"File Pembayaran yang di proses adalah: {strPayFileName.Trim()}", strlogFileName);
+            if (strOutletFileName != "") WriteLog($"File Outlet yang di proses adalah: {strOutletFileName.Trim()}", strlogFileName);
 
             if (strSalesFileName.Trim() != "" || strSalesPattern.Trim() != "")
             {
@@ -245,9 +216,12 @@ public class UploadProcess
             {
                 WriteLog("Copy process for Excel files (sales, payment,outlet) done, Start archive process.", strlogFileName);
                 strZipFile = $"{strDistID}-{strDistName}_{strDsPeriod}.zip";
-                ZipFile.CreateFromDirectory(strDsUploadDir, strDsExpDir + Path.DirectorySeparatorChar + strZipFile);
+                //DeleteAllFilesAndSubdirectories(strDsUploadDir);
+                //DeleteAllFilesAndSubdirectories(strDsExpDir + strDsPeriod);
+
+                ZipFile.CreateFromDirectory(strDsExpDir + strDsPeriod, strDsUploadDir + Path.DirectorySeparatorChar + strZipFile );
                 WriteLog("Archive process Excel file sales, payment and outlet done", strlogFileName);
-                strStatusCode = SendReq(strDsExpDir + Path.DirectorySeparatorChar + strZipFile, strSandboxBoolean, strSecureHTTP);
+                strStatusCode = SendReq(strDsUploadDir + Path.DirectorySeparatorChar + strZipFile, strSandboxBoolean, strSecureHTTP);
                 WriteLog("Upload process Excel file sales, payment and outlet done", strlogFileName);
                 if (strStatusCode == "200")
                 {
@@ -267,15 +241,31 @@ public class UploadProcess
         }
         catch (Exception ex)
         {
-            if (strlogFileName.Trim() == "")
-            {
-                if (Directory.Exists(strDsWorkingDir))
-                {
-                    strlogFileName = strDsWorkingDir + Path.DirectorySeparatorChar + "ExcelDataSharingApp.log";
-                }
-            }
             WriteLog($"WARNING: Error occurred: {ex.Message}", strlogFileName);
             _logger.LogError(ex, "Error occurred in Main process");
+        }
+    }
+
+    private static void DeleteAllFilesAndSubdirectories(string folderPath)
+    {
+        // Create a DirectoryInfo object
+        DirectoryInfo directory = new DirectoryInfo(folderPath);
+
+        // Check if the directory exists
+        if (directory.Exists)
+        {
+            // Delete all files in the directory
+            foreach (FileInfo file in directory.GetFiles())
+            {
+                file.Delete();
+            }
+
+            // Optionally, delete all subdirectories
+            foreach (DirectoryInfo subDirectory in directory.GetDirectories())
+            {
+                subDirectory.Delete(true); // true to delete subdirectories and files
+            }
+            directory.Delete();
         }
     }
 
@@ -283,14 +273,23 @@ public class UploadProcess
     {
         try
         {
-            strSandboxBoolean = _strSandboxBoolean;
+#if DEBUG
+            strSandboxBoolean = "Y";
+            strDistID = "0";
+            strDistName = "Testing-Only";
+#else
+            strSandboxBoolean = "N"";
+            strDistID = _strDistID;
+            strDistName = _strDistName;
+#endif
             strSecureHTTP = _strSecureHTTP;
+
             strSalesPattern = _strSalesPattern;
             strPayPattern = _strPayPattern;
             strOutletPattern = _strOutletPattern;
-            strDistID = _strDistID;
-            strDistName = _strDistName;
+
             strDsDataSourceDir = _strDataFolder;
+
             strDsWorkingDir = _strWorkingFolder;
             strDsExpDir = Path.Combine(_strWorkingFolder, "FTI-sharing");
             strDsUploadDir = Path.Combine(_strWorkingFolder, "FTI-upload");
@@ -301,5 +300,24 @@ public class UploadProcess
         {
             _logger.LogError("Unable to setup upload class configuration.", ex);
         }
+    }
+
+    public void UpdateProperties(string sales, string repayment, string outlet, string dataFolder, string dtid, string distName, string _strWorkingFolder)
+    {
+        strSalesPattern = sales;
+        strPayPattern = repayment;
+        strOutletPattern = outlet;
+        strDsDataSourceDir = dataFolder;
+#if DEBUG
+        strDistID = "0";
+        strDistName = "Testing-Only";
+#else
+        strDistID = dtid;
+        strDistName = distName;
+#endif
+
+        strDsExpDir = Path.Combine(_strWorkingFolder, "FTI-sharing");
+
+        // Log the update
     }
 }

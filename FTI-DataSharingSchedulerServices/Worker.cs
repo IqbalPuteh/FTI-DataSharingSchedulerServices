@@ -21,6 +21,8 @@ public class Worker : BackgroundService
     public string DistName { get; private set; } = "Test";
     public string AppWorkingFolder { get; private set; }
 
+    private UploadProcess _uploadProcess;
+
     public Worker(ILogger<Worker> logger)
     {
         _logger = logger;
@@ -57,13 +59,54 @@ public class Worker : BackgroundService
 
     private async Task InitializeAsync()
     {
+        await ReadFileAsync(_schedulerConfigFolder + "\\DateTimeInfo.ini");
+        
+        if (_uploadProcess == null)
+        {
+            CreateUploadProcess();
+        }
+        else
+        {
+            UpdateUploadProcess();
+        }
+    }
+
+    private void CreateUploadProcess()
+    {
+        //_uploadProcess = new UploadProcess("Y", "Y", Sales, Repayment, Outlet, DataFolder, DTid, "Testing_Only", AppWorkingFolder, _logger);
+
+        _uploadProcess = new UploadProcess("N", "Y", Sales, Repayment, Outlet, DataFolder, DTid, DistName, AppWorkingFolder, _logger);
+
+        //_logger.LogInformation("UploadProcess created.");
+    }
+
+    private void UpdateUploadProcess()
+    {
+        _uploadProcess.UpdateProperties(Sales, Repayment, Outlet, DataFolder, DTid, DistName, AppWorkingFolder);
+        //_logger.LogInformation("UploadProcess updated with new configuration.");
+    }
+
+    private async Task PerformTask()
+    {
         try
         {
-            await ReadFileAsync(_schedulerConfigFolder + "\\DateTimeInfo.ini");
+            _logger.LogInformation(">> At {time} performing data upload by executing Data Sharing app at the specified time.", DateTimeOffset.Now);
+
+            _logger.LogInformation($">>>> [RESULT] File info value in sequence are {Date1} ,{Date2} ,{Date3} ,{Time} ,{Sales}, {Repayment}, {Outlet}, {DataFolder} {DTid} and {DistName} ...");
+
+            if (_uploadProcess != null)
+            {
+                await _uploadProcess.ExecuteAsync();
+                _logger.LogInformation(">>>> [OUTPUT] UploadProcess execution completed.");
+            }
+            else
+            {
+                _logger.LogError("UploadProcess is not initialized. Cannot perform task.");
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex.Message);
+            _logger.LogError(ex, "Error executing Data Sharing app at {time}", DateTimeOffset.Now);
         }
     }
 
@@ -95,26 +138,6 @@ public class Worker : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error reading file: {FilePath}", filePath);
-        }
-    }
-
-    private async Task PerformTask()
-    {
-        try
-        {
-            _logger.LogInformation(">> At {time} performing data upload by executing Data Sharing app at the specified time.", DateTimeOffset.Now);
-
-            _logger.LogInformation($">>>> [RESULT] File info value in sequence are {Date1} ,{Date2} ,{Date3} ,{Time} ,{Sales}, {Repayment}, {Outlet}, {DataFolder} {DTid} and {DistName} ...");
-#if DEBUG
-            var uploadProcess = new UploadProcess("Y", "Y", Sales, Repayment, Outlet, DataFolder, DTid, "Testing_Only", AppWorkingFolder, _logger);
-#else
-            var uploadProcess = new UploadProcess("Y","Y",Sales,Repayment, Outlet, DataFolder, DTid, DistName, AppWorkingFolder, _logger);
-#endif
-            await uploadProcess.ExecuteAsync();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error executing Data Sharing app at {time}", DateTimeOffset.Now);
         }
     }
 }
