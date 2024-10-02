@@ -114,7 +114,8 @@ public class UploadProcess
 
             strlogFileName = "DEBUG-" + strDistID + "-" + strDistName + "-" + strDsPeriod + ".log";
 
-            CheckandRefreshFolder(strDsExpDir + strDsPeriod);
+            strDsExpDir += strDsPeriod;
+            CheckandRefreshFolder(strDsExpDir);
             CheckandRefreshFolder(strDsUploadDir);
 
             strlogFileName = strDsWorkingDir + Path.DirectorySeparatorChar + strlogFileName;
@@ -169,6 +170,7 @@ public class UploadProcess
                 {
                     try
                     {
+                        File.Copy(strSalesFileName, Path.Combine(strDsExpDir, Path.GetFileName(strSalesFileName)) , true);
                         File.Copy(strSalesFileName, strDsUploadDir + Path.DirectorySeparatorChar + strFileDataName, true);
                         File.Delete(strSalesFileName);
                     }
@@ -185,6 +187,7 @@ public class UploadProcess
                 {
                     try
                     {
+                        File.Copy(strPayFileName, Path.Combine(strDsExpDir, Path.GetFileName(strPayFileName)), true);
                         File.Copy(strPayFileName, strDsUploadDir + Path.DirectorySeparatorChar + strFileDataName, true);
                         File.Delete(strPayFileName);
                     }
@@ -202,6 +205,7 @@ public class UploadProcess
                 {
                     try
                     {
+                        File.Copy(strOutletFileName, Path.Combine(strDsExpDir, Path.GetFileName(strOutletFileName)), true);
                         File.Copy(strOutletFileName, strDsUploadDir + Path.DirectorySeparatorChar + strFileDataName, true);
                         File.Delete(strOutletFileName);
                     }
@@ -219,7 +223,8 @@ public class UploadProcess
                 //DeleteAllFilesAndSubdirectories(strDsUploadDir);
                 //DeleteAllFilesAndSubdirectories(strDsExpDir + strDsPeriod);
 
-                ZipFile.CreateFromDirectory(strDsExpDir + strDsPeriod, strDsUploadDir + Path.DirectorySeparatorChar + strZipFile );
+                ZipFile.CreateFromDirectory(strDsUploadDir, strDsWorkingDir + Path.DirectorySeparatorChar + strZipFile );
+                File.Move(strDsWorkingDir + Path.DirectorySeparatorChar + strZipFile, strDsUploadDir + Path.DirectorySeparatorChar + strZipFile);
                 WriteLog("Archive process Excel file sales, payment and outlet done", strlogFileName);
                 strStatusCode = SendReq(strDsUploadDir + Path.DirectorySeparatorChar + strZipFile, strSandboxBoolean, strSecureHTTP);
                 WriteLog("Upload process Excel file sales, payment and outlet done", strlogFileName);
