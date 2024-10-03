@@ -67,7 +67,7 @@ public class UploadProcess
     {
         using (StreamWriter streamWriter = File.AppendText(strFileName))
         {
-            streamWriter.WriteLine($"Log Entry : {DateTime.Now:G} - :{logMessage}");
+            streamWriter.WriteLine($"Log Entry : {DateTime.Now:F} - :{logMessage}");
         }
     }
 
